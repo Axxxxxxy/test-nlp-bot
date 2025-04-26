@@ -1,16 +1,34 @@
+// ===============================
+// 環境変数ロード
+// ===============================
+require('dotenv').config();
+
+// ===============================
 // ライブラリ読み込み
+// ===============================
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const kuromoji = require('kuromoji');
 
-// アプリを作る
+// ===============================
+// 環境変数チェック
+// ===============================
+const CHANNEL_ACCESS_TOKEN = process.env.CHANNEL_ACCESS_TOKEN;
+const CHANNEL_SECRET = process.env.CHANNEL_SECRET; // いまは未使用だが念のため読み込む
+
+if (!CHANNEL_ACCESS_TOKEN || !CHANNEL_SECRET) {
+  console.error('Error: Missing LINE credentials. Check your .env or environment variables.');
+  process.exit(1); // 環境変数が無いならサーバーを起動しない
+}
+
+// ===============================
+// Expressアプリ作成
+// ===============================
 const app = express();
 app.use(bodyParser.json());
 
-// LINE BOTのチャネルアクセストークン
-const CHANNEL_ACCESS_TOKEN = 'ここに自分のトークンを貼る';
-
+// ===============================
 // FAQ（キーワードと答えのリスト）
 const faq = [
   {
@@ -27,7 +45,9 @@ const faq = [
   }
 ];
 
-// LINEからメッセージを受け取るWebhook
+// ===============================
+// Webhook受信エンドポイント
+// ===============================
 app.post('/webhook', (req, res) => {
   const events = req.body.events;
 
@@ -40,11 +60,12 @@ app.post('/webhook', (req, res) => {
   res.sendStatus(200);
 });
 
-// ユーザーのメッセージを処理する
+// ===============================
+// ユーザーメッセージ処理
+// ===============================
 function handleUserMessage(event) {
   const userMessage = event.message.text;
 
-  // kuromojiで形態素解析！
   kuromoji.builder({ dicPath: 'node_modules/kuromoji/dict' }).build((err, tokenizer) => {
     if (err) {
       console.error('形態素解析エラー:', err);
@@ -54,26 +75,22 @@ function handleUserMessage(event) {
     const tokens = tokenizer.tokenize(userMessage);
     const words = tokens.map(token => token.surface_form);
 
-    // 初期の返事（マッチしなかった場合）
     let reply = "すみません、よくわかりませんでした。";
 
-    // FAQルールにマッチするか探す
     for (let item of faq) {
-      for (let keyword of item.keywords) {
-        if (words.includes(keyword)) {
-          reply = item.answer;
-          break;
-        }
+      if (item.keywords.some(keyword => words.includes(keyword))) {
+        reply = item.answer;
+        break;
       }
-      if (reply !== "すみません、よくわかりませんでした。") break;
     }
 
-    // LINEに返事を送る
     replyToLine(event.replyToken, reply);
   });
 }
 
-// LINEにメッセージ返信する
+// ===============================
+// LINEへの返信処理
+// ===============================
 function replyToLine(replyToken, replyText) {
   axios.post('https://api.line.me/v2/bot/message/reply', {
     replyToken: replyToken,
@@ -88,8 +105,10 @@ function replyToLine(replyToken, replyText) {
   });
 }
 
+// ===============================
 // サーバー起動
+// ===============================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`テストサーバーが動いてます！ポート: ${PORT}`);
+  console.log(`✅ NLP LINE Botサーバー起動中（ポート: ${PORT}）`);
 });
